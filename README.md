@@ -20,25 +20,10 @@ Route2API is an open-source API documentation generator for PHP projects. The fi
 
 ## Install
 
-Install in a ThinkPHP project:
+Install Route2API as a development dependency in your ThinkPHP project:
 
 ```bash
 composer require route2api/route2api --dev
-```
-
-Use the development version directly from GitHub before Packagist release:
-
-```bash
-composer config repositories.route2api vcs https://github.com/ruaibeite/route2api.git
-composer require route2api/route2api:dev-main --dev
-```
-
-Or run locally while developing Route2API:
-
-```bash
-git clone https://github.com/ruaibeite/route2api.git
-cd route2api
-php bin/route2api
 ```
 
 ## Quick Start
@@ -182,9 +167,9 @@ The recommended workflow is: scan code first, then use the generated OpenAPI or 
 - CI command for regenerating docs
 - Optional web UI
 
-## Development
+## Contributing
 
-Run the smoke test:
+Clone the repository and run the smoke test:
 
 ```bash
 tests/smoke.sh
@@ -194,19 +179,6 @@ Run syntax checks:
 
 ```bash
 find . -name '*.php' -exec php -l {} \;
-```
-
-## Publish To Packagist
-
-1. Push this repository to GitHub.
-2. Create an account on [Packagist](https://packagist.org/).
-3. Submit `https://github.com/ruaibeite/route2api`.
-4. Enable GitHub hook or auto-update in Packagist.
-
-After Packagist indexes the package, users can install it with:
-
-```bash
-composer require route2api/route2api --dev
 ```
 
 ## License
