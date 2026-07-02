@@ -9,14 +9,21 @@ use Route2Api\IR\ApiProject;
 
 final class ThinkPHPScanner
 {
-    public function scan(string $projectPath): ApiProject
+    /**
+     * @param string[] $routePatterns
+     * @param string[] $controllerDirs
+     */
+    public function scan(string $projectPath, array $routePatterns = ['route/*.php'], array $controllerDirs = ['app/controller']): ApiProject
     {
         $projectPath = rtrim($projectPath, '/');
         $projectName = basename($projectPath) ?: 'ThinkPHP API';
         $routes = [];
+        $controllerDirs = $controllerDirs !== [] ? $controllerDirs : ['app/controller'];
 
-        foreach (glob($projectPath . '/route/*.php') ?: [] as $routeFile) {
-            $routes = array_merge($routes, $this->scanRouteFile($routeFile, $projectPath));
+        foreach ($routePatterns as $routePattern) {
+            foreach (glob($projectPath . '/' . ltrim($routePattern, '/')) ?: [] as $routeFile) {
+                $routes = array_merge($routes, $this->scanRouteFile($routeFile, $projectPath, $controllerDirs));
+            }
         }
 
         usort($routes, static fn (ApiEndpoint $a, ApiEndpoint $b): int => [$a->path, $a->method] <=> [$b->path, $b->method]);
@@ -25,9 +32,10 @@ final class ThinkPHPScanner
     }
 
     /**
+     * @param string[] $controllerDirs
      * @return ApiEndpoint[]
      */
-    private function scanRouteFile(string $routeFile, string $projectPath): array
+    private function scanRouteFile(string $routeFile, string $projectPath, array $controllerDirs): array
     {
         $content = (string) file_get_contents($routeFile);
         $endpoints = [];
@@ -37,7 +45,7 @@ final class ThinkPHPScanner
         foreach ($this->findSimpleRoutes($contentWithoutGroups) as $route) {
             $path = $this->normalizePath($route['path']);
             $controller = $this->normalizeController($route['handler']);
-            $doc = $this->readControllerDoc($controller, $projectPath);
+            $doc = $this->readControllerDoc($controller, $projectPath, $controllerDirs);
             $endpoints[] = new ApiEndpoint(
                 strtoupper($route['method']),
                 $path,
@@ -53,7 +61,7 @@ final class ThinkPHPScanner
         foreach ($this->findResourceRoutes($content) as $resource) {
             $prefix = $this->normalizePath($resource['path']);
             $controller = $this->normalizeController($resource['handler']);
-            foreach ($this->resourceActions($prefix, $controller, $projectPath) as $endpoint) {
+            foreach ($this->resourceActions($prefix, $controller, $projectPath, $controllerDirs) as $endpoint) {
                 $endpoints[] = $endpoint;
             }
         }
@@ -62,7 +70,7 @@ final class ThinkPHPScanner
             foreach ($this->findGroupedRoutes($content, $prefix['body']) as $route) {
                 $path = $this->normalizePath($prefix['prefix'] . '/' . $route['path']);
                 $controller = $this->normalizeController($route['handler']);
-                $doc = $this->readControllerDoc($controller, $projectPath);
+                $doc = $this->readControllerDoc($controller, $projectPath, $controllerDirs);
                 $endpoints[] = new ApiEndpoint(
                     strtoupper($route['method']),
                     $path,
@@ -153,9 +161,10 @@ final class ThinkPHPScanner
     }
 
     /**
+     * @param string[] $controllerDirs
      * @return ApiEndpoint[]
      */
-    private function resourceActions(string $prefix, string $controller, string $projectPath): array
+    private function resourceActions(string $prefix, string $controller, string $projectPath, array $controllerDirs): array
     {
         $actions = [
             ['GET', $prefix, 'index', '列表'],
@@ -168,7 +177,7 @@ final class ThinkPHPScanner
         $endpoints = [];
         foreach ($actions as [$method, $path, $action, $fallbackTitle]) {
             $target = $controller . '/' . $action;
-            $doc = $this->readControllerDoc($target, $projectPath);
+            $doc = $this->readControllerDoc($target, $projectPath, $controllerDirs);
             $endpoints[] = new ApiEndpoint(
                 $method,
                 $this->normalizePath($path),
@@ -185,16 +194,17 @@ final class ThinkPHPScanner
     }
 
     /**
+     * @param string[] $controllerDirs
      * @return array{title:string,description:string,parameters:array<int, array{name:string,in:string,required:bool,type:string,description:string}>}
      */
-    private function readControllerDoc(string $controller, string $projectPath): array
+    private function readControllerDoc(string $controller, string $projectPath, array $controllerDirs): array
     {
         [$class, $method] = $this->splitController($controller);
         if ($class === '' || $method === '') {
             return ['title' => '', 'description' => '', 'parameters' => []];
         }
 
-        $file = $this->controllerToFile($class, $projectPath);
+        $file = $this->controllerToFile($class, $projectPath, $controllerDirs);
         if (!is_file($file)) {
             return ['title' => '', 'description' => '', 'parameters' => []];
         }
@@ -282,7 +292,7 @@ final class ThinkPHPScanner
 
     private function normalizeController(string $handler): string
     {
-        return str_replace(['@', '\\\\'], ['/', '\\'], trim($handler));
+        return str_replace(['@', '.', '\\\\'], ['/', '/', '\\'], trim($handler));
     }
 
     /**
@@ -298,14 +308,24 @@ final class ThinkPHPScanner
         return ['', ''];
     }
 
-    private function controllerToFile(string $class, string $projectPath): string
+    /**
+     * @param string[] $controllerDirs
+     */
+    private function controllerToFile(string $class, string $projectPath, array $controllerDirs): string
     {
         $class = ltrim(str_replace('\\', '/', $class), '/');
         if (str_starts_with($class, 'app/')) {
             return $projectPath . '/' . $class . '.php';
         }
 
-        return $projectPath . '/app/controller/' . $class . '.php';
+        foreach ($controllerDirs as $controllerDir) {
+            $file = $projectPath . '/' . trim($controllerDir, '/') . '/' . $class . '.php';
+            if (is_file($file)) {
+                return $file;
+            }
+        }
+
+        return $projectPath . '/' . trim($controllerDirs[0], '/') . '/' . $class . '.php';
     }
 
     private function titleFromPath(string $path): string

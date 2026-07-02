@@ -11,6 +11,19 @@ final class OpenApiExporter
 {
     public function exportJson(ApiProject $project): string
     {
+        return json_encode($this->document($project), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . PHP_EOL;
+    }
+
+    public function exportYaml(ApiProject $project): string
+    {
+        return $this->yaml($this->document($project));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function document(ApiProject $project): array
+    {
         $paths = [];
 
         foreach ($project->endpoints as $endpoint) {
@@ -39,7 +52,7 @@ final class OpenApiExporter
             ];
         }
 
-        $document = [
+        return [
             'openapi' => '3.0.3',
             'info' => [
                 'title' => $project->name,
@@ -50,8 +63,6 @@ final class OpenApiExporter
             ],
             'paths' => $paths,
         ];
-
-        return json_encode($document, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . PHP_EOL;
     }
 
     private function toOpenApiPath(string $path): string
@@ -92,5 +103,64 @@ final class OpenApiExporter
         }
 
         return $parameters;
+    }
+
+    /**
+     * @param mixed $value
+     */
+    private function yaml(mixed $value, int $indent = 0): string
+    {
+        $lines = [];
+        $prefix = str_repeat('  ', $indent);
+
+        if (!is_array($value)) {
+            return $prefix . $this->yamlScalar($value) . PHP_EOL;
+        }
+
+        foreach ($value as $key => $item) {
+            if (is_int($key)) {
+                if (is_array($item)) {
+                    $lines[] = $prefix . '-';
+                    $lines[] = rtrim($this->yaml($item, $indent + 1));
+                } else {
+                    $lines[] = $prefix . '- ' . $this->yamlScalar($item);
+                }
+                continue;
+            }
+
+            if (is_array($item)) {
+                $lines[] = $prefix . $key . ':';
+                $lines[] = rtrim($this->yaml($item, $indent + 1));
+            } else {
+                $lines[] = $prefix . $key . ': ' . $this->yamlScalar($item);
+            }
+        }
+
+        return implode(PHP_EOL, $lines) . PHP_EOL;
+    }
+
+    /**
+     * @param mixed $value
+     */
+    private function yamlScalar(mixed $value): string
+    {
+        if ($value === null) {
+            return 'null';
+        }
+
+        if (is_bool($value)) {
+            return $value ? 'true' : 'false';
+        }
+
+        if (is_int($value) || is_float($value)) {
+            return (string) $value;
+        }
+
+        $string = (string) $value;
+        if ($string === '' || preg_match('/[^A-Za-z0-9_.\\/-]/u', $string) === 1) {
+            return '"' . str_replace('"', '\\"', $string) . '"';
+        }
+
+        return $string;
     }
 }

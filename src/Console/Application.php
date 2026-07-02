@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Route2Api\Console;
 
+use Route2Api\Config\ConfigLoader;
+use Route2Api\Exporter\HtmlExporter;
 use Route2Api\Exporter\MarkdownExporter;
 use Route2Api\Exporter\OpenApiExporter;
+use Route2Api\Exporter\PostmanExporter;
 use Route2Api\Scanner\ThinkPHP\ThinkPHPScanner;
 use Throwable;
 
@@ -31,9 +34,15 @@ final class Application
     {
         $options = $this->parseOptions($args);
         $projectPath = $options['path'] ?? getcwd();
-        $framework = strtolower((string) ($options['framework'] ?? 'thinkphp'));
-        $outputDir = $this->absolutePath((string) ($options['output'] ?? $projectPath . '/route2api'), $projectPath);
-        $formats = array_filter(array_map('trim', explode(',', (string) ($options['format'] ?? 'openapi,markdown'))));
+        $configFile = isset($options['config'])
+            ? $this->absolutePath((string) $options['config'], $projectPath)
+            : $projectPath . '/route2api.yaml';
+        $config = (new ConfigLoader())->load($configFile);
+
+        $framework = strtolower((string) ($options['framework'] ?? $config['framework'] ?? 'thinkphp'));
+        $outputDirOption = (string) ($options['output'] ?? $config['output']['dir'] ?? $projectPath . '/route2api');
+        $outputDir = $this->absolutePath($outputDirOption, $projectPath);
+        $formats = $this->formats($options['format'] ?? $config['output']['formats'] ?? 'openapi,markdown');
 
         if ($framework !== 'thinkphp') {
             throw new \InvalidArgumentException('Only thinkphp is supported in v0.1.0.');
@@ -43,7 +52,11 @@ final class Application
             throw new \InvalidArgumentException("Project path does not exist: {$projectPath}");
         }
 
-        $project = (new ThinkPHPScanner())->scan($projectPath);
+        $routePatterns = $this->stringList($config['scan']['routes'] ?? ['route/*.php']);
+        $controllerDirs = $this->stringList($config['scan']['controllers'] ?? ['app/controller']);
+        $project = (new ThinkPHPScanner())->scan($projectPath, $routePatterns, $controllerDirs);
+        $project->name = (string) ($options['name'] ?? $config['project']['name'] ?? $project->name);
+        $project->baseUrl = (string) ($options['base-url'] ?? $config['project']['base_url'] ?? $project->baseUrl);
 
         if (!is_dir($outputDir) && !mkdir($outputDir, 0775, true) && !is_dir($outputDir)) {
             throw new \RuntimeException("Cannot create output directory: {$outputDir}");
@@ -57,9 +70,27 @@ final class Application
                 $generated[] = $file;
             }
 
+            if ($format === 'yaml' || $format === 'openapi-yaml') {
+                $file = $outputDir . '/openapi.yaml';
+                file_put_contents($file, (new OpenApiExporter())->exportYaml($project));
+                $generated[] = $file;
+            }
+
+            if ($format === 'postman') {
+                $file = $outputDir . '/postman_collection.json';
+                file_put_contents($file, (new PostmanExporter())->exportJson($project));
+                $generated[] = $file;
+            }
+
             if ($format === 'markdown' || $format === 'md') {
                 $file = $outputDir . '/api.md';
                 file_put_contents($file, (new MarkdownExporter())->export($project));
+                $generated[] = $file;
+            }
+
+            if ($format === 'html') {
+                $file = $outputDir . '/index.html';
+                file_put_contents($file, (new HtmlExporter())->export($project));
                 $generated[] = $file;
             }
         }
@@ -100,7 +131,10 @@ output:
   dir: route2api
   formats:
     - openapi
+    - yaml
+    - postman
     - markdown
+    - html
 
 YAML;
 
@@ -117,11 +151,11 @@ Route2API v0.1.0
 
 Usage:
   route2api init [--path=/path/to/project]
-  route2api scan [--path=/path/to/project] [--framework=thinkphp] [--output=route2api] [--format=openapi,markdown]
+  route2api scan [--path=/path/to/project] [--config=route2api.yaml] [--framework=thinkphp] [--output=route2api] [--format=openapi,yaml,postman,markdown,html]
 
 Examples:
   vendor/bin/route2api scan --framework=thinkphp
-  vendor/bin/route2api scan --path=/www/wwwroot/demo --output=docs/api --format=openapi,markdown
+  vendor/bin/route2api scan --path=/www/wwwroot/demo --output=docs/api --format=openapi,yaml,postman,markdown,html
 
 TXT;
 
@@ -151,5 +185,27 @@ TXT;
         }
 
         return rtrim($basePath, '/') . '/' . $path;
+    }
+
+    /**
+     * @param mixed $formats
+     * @return string[]
+     */
+    private function formats(mixed $formats): array
+    {
+        return $this->stringList($formats, ',');
+    }
+
+    /**
+     * @param mixed $value
+     * @return string[]
+     */
+    private function stringList(mixed $value, string $separator = ','): array
+    {
+        if (is_array($value)) {
+            return array_values(array_filter(array_map(static fn (mixed $item): string => trim((string) $item), $value)));
+        }
+
+        return array_values(array_filter(array_map('trim', explode($separator, (string) $value))));
     }
 }

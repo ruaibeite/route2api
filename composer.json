@@ -27,7 +27,8 @@
     "bin/route2api"
   ],
   "scripts": {
-    "route2api": "php bin/route2api"
+    "route2api": "php bin/route2api",
+    "test": "tests/smoke.sh"
   },
   "minimum-stability": "stable"
 }

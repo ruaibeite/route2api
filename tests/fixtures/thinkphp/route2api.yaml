@@ -1,0 +1,14 @@
+project:
+  name: Fixture API
+  base_url: https://api.example.test
+
+framework: thinkphp
+
+output:
+  dir: docs/api
+  formats:
+    - openapi
+    - yaml
+    - postman
+    - markdown
+    - html
