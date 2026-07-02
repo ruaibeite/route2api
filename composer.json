@@ -1,0 +1,33 @@
+{
+  "name": "route2api/route2api",
+  "description": "Generate OpenAPI and Markdown API documents from ThinkPHP routes and controllers.",
+  "type": "library",
+  "license": "MIT",
+  "keywords": [
+    "thinkphp",
+    "openapi",
+    "api-documentation",
+    "postman",
+    "markdown"
+  ],
+  "authors": [
+    {
+      "name": "Route2API Contributors"
+    }
+  ],
+  "require": {
+    "php": ">=8.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "Route2Api\\": "src/"
+    }
+  },
+  "bin": [
+    "bin/route2api"
+  ],
+  "scripts": {
+    "route2api": "php bin/route2api"
+  },
+  "minimum-stability": "stable"
+}
