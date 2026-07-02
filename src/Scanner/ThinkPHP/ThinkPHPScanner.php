@@ -45,7 +45,7 @@ final class ThinkPHPScanner
         foreach ($this->findSimpleRoutes($contentWithoutGroups) as $route) {
             $path = $this->normalizePath($route['path']);
             $controller = $this->normalizeController($route['handler']);
-            $doc = $this->readControllerDoc($controller, $projectPath, $controllerDirs);
+            $doc = $this->readControllerDoc($controller, $projectPath, $controllerDirs, strtoupper($route['method']));
             $endpoints[] = new ApiEndpoint(
                 strtoupper($route['method']),
                 $path,
@@ -70,7 +70,7 @@ final class ThinkPHPScanner
             foreach ($this->findGroupedRoutes($content, $prefix['body']) as $route) {
                 $path = $this->normalizePath($prefix['prefix'] . '/' . $route['path']);
                 $controller = $this->normalizeController($route['handler']);
-                $doc = $this->readControllerDoc($controller, $projectPath, $controllerDirs);
+                $doc = $this->readControllerDoc($controller, $projectPath, $controllerDirs, strtoupper($route['method']));
                 $endpoints[] = new ApiEndpoint(
                     strtoupper($route['method']),
                     $path,
@@ -177,7 +177,7 @@ final class ThinkPHPScanner
         $endpoints = [];
         foreach ($actions as [$method, $path, $action, $fallbackTitle]) {
             $target = $controller . '/' . $action;
-            $doc = $this->readControllerDoc($target, $projectPath, $controllerDirs);
+            $doc = $this->readControllerDoc($target, $projectPath, $controllerDirs, $method);
             $endpoints[] = new ApiEndpoint(
                 $method,
                 $this->normalizePath($path),
@@ -197,7 +197,7 @@ final class ThinkPHPScanner
      * @param string[] $controllerDirs
      * @return array{title:string,description:string,parameters:array<int, array{name:string,in:string,required:bool,type:string,description:string}>}
      */
-    private function readControllerDoc(string $controller, string $projectPath, array $controllerDirs): array
+    private function readControllerDoc(string $controller, string $projectPath, array $controllerDirs, string $httpMethod): array
     {
         [$class, $method] = $this->splitController($controller);
         if ($class === '' || $method === '') {
@@ -239,7 +239,7 @@ final class ThinkPHPScanner
 
         foreach ($clean as $line) {
             if (str_starts_with($line, '@param')) {
-                $parameter = $this->parseParamDoc($line);
+                $parameter = $this->parseParamDoc($line, $httpMethod);
                 if ($parameter !== null) {
                     $parameters[] = $parameter;
                 }
@@ -257,6 +257,14 @@ final class ThinkPHPScanner
             }
         }
 
+        $methodBody = $this->methodBodyFromOffset($content, $match[0][1]);
+        if ($methodBody !== '') {
+            $parameters = $this->mergeParameters([
+                ...$parameters,
+                ...(new ControllerAnalyzer())->extractParameters($methodBody, $httpMethod),
+            ]);
+        }
+
         return [
             'title' => $title,
             'description' => implode("\n", $description),
@@ -267,7 +275,7 @@ final class ThinkPHPScanner
     /**
      * @return array{name:string,in:string,required:bool,type:string,description:string}|null
      */
-    private function parseParamDoc(string $line): ?array
+    private function parseParamDoc(string $line, string $httpMethod): ?array
     {
         if (!preg_match('/@param\\s+([\\w\\[\\]|]+)\\s+\\$?([\\w.]+)\\s*(.*)$/', $line, $match)) {
             return null;
@@ -275,11 +283,40 @@ final class ThinkPHPScanner
 
         return [
             'name' => $match[2],
-            'in' => 'query',
+            'in' => in_array(strtoupper($httpMethod), ['POST', 'PUT', 'PATCH'], true) ? 'body' : 'query',
             'required' => !str_contains(strtolower($match[3] ?? ''), 'optional'),
             'type' => $this->normalizeType($match[1]),
             'description' => trim($match[3] ?? ''),
         ];
+    }
+
+    private function methodBodyFromOffset(string $content, int $methodOffset): string
+    {
+        $braceStart = strpos($content, '{', $methodOffset);
+        if ($braceStart === false) {
+            return '';
+        }
+
+        $depth = 0;
+        $length = strlen($content);
+        for ($i = $braceStart; $i < $length; $i++) {
+            $char = $content[$i];
+            if ($char === '{') {
+                $depth++;
+                continue;
+            }
+
+            if ($char !== '}') {
+                continue;
+            }
+
+            $depth--;
+            if ($depth === 0) {
+                return substr($content, $braceStart + 1, $i - $braceStart - 1);
+            }
+        }
+
+        return '';
     }
 
     private function normalizePath(string $path): string
@@ -363,6 +400,33 @@ final class ThinkPHPScanner
             'array' => 'array',
             default => 'string',
         };
+    }
+
+    /**
+     * @param array<int, array{name:string,in:string,required:bool,type:string,description:string}> $parameters
+     * @return array<int, array{name:string,in:string,required:bool,type:string,description:string}>
+     */
+    private function mergeParameters(array $parameters): array
+    {
+        $merged = [];
+
+        foreach ($parameters as $parameter) {
+            $key = $parameter['in'] . ':' . $parameter['name'];
+            if (!isset($merged[$key])) {
+                $merged[$key] = $parameter;
+                continue;
+            }
+
+            $merged[$key]['required'] = $merged[$key]['required'] || $parameter['required'];
+            if ($merged[$key]['description'] === '' && $parameter['description'] !== '') {
+                $merged[$key]['description'] = $parameter['description'];
+            }
+            if ($merged[$key]['type'] === 'string' && $parameter['type'] !== 'string') {
+                $merged[$key]['type'] = $parameter['type'];
+            }
+        }
+
+        return array_values($merged);
     }
 
     /**

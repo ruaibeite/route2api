@@ -60,20 +60,61 @@ final class PostmanExporter
             ];
         }
 
+        $bodyParameters = array_values(array_filter(
+            $endpoint->parameters,
+            static fn (array $parameter): bool => $parameter['in'] === 'body'
+        ));
+        $body = [];
+        foreach ($bodyParameters as $parameter) {
+            $body[$parameter['name']] = $this->exampleValue($parameter['type']);
+        }
+
+        $request = [
+            'method' => $endpoint->method === 'ANY' ? 'GET' : $endpoint->method,
+            'header' => [],
+            'description' => trim($endpoint->description . "\n\nController: " . $endpoint->controller),
+            'url' => [
+                'raw' => '{{baseUrl}}' . $endpoint->path,
+                'host' => ['{{baseUrl}}'],
+                'path' => array_values(array_filter(explode('/', trim($endpoint->path, '/')))),
+                'query' => $query,
+            ],
+        ];
+
+        if ($body !== []) {
+            $request['header'][] = [
+                'key' => 'Content-Type',
+                'value' => 'application/json',
+            ];
+            $request['body'] = [
+                'mode' => 'raw',
+                'raw' => json_encode($body, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                'options' => [
+                    'raw' => [
+                        'language' => 'json',
+                    ],
+                ],
+            ];
+        }
+
         return [
             'name' => $endpoint->title,
-            'request' => [
-                'method' => $endpoint->method === 'ANY' ? 'GET' : $endpoint->method,
-                'header' => [],
-                'description' => trim($endpoint->description . "\n\nController: " . $endpoint->controller),
-                'url' => [
-                    'raw' => '{{baseUrl}}' . $endpoint->path,
-                    'host' => ['{{baseUrl}}'],
-                    'path' => array_values(array_filter(explode('/', trim($endpoint->path, '/')))),
-                    'query' => $query,
-                ],
-            ],
+            'request' => $request,
             'response' => [],
         ];
+    }
+
+    /**
+     * @return mixed
+     */
+    private function exampleValue(string $type): mixed
+    {
+        return match ($type) {
+            'integer' => 0,
+            'number' => 0.0,
+            'boolean' => false,
+            'array' => [],
+            default => '',
+        };
     }
 }

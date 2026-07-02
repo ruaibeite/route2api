@@ -11,6 +11,8 @@ Route2API is an open-source API documentation generator for PHP projects. The fi
 - Detect simple `Route::group`
 - Expand `Route::resource`
 - Read controller method PHPDoc
+- Infer request parameters from common controller code patterns
+- Infer required fields from simple validation rules and `requireFields(...)`
 - Export OpenAPI 3.0 JSON
 - Export OpenAPI 3.0 YAML
 - Export Postman Collection v2.1 JSON
@@ -147,11 +149,12 @@ Apifox, ApiPost, Postman, Swagger UI, and Redoc can consume the generated output
 
 ## Current Limitations
 
-Route2API v0.1 is intentionally small. It does not try to infer every request field from arbitrary PHP code.
+Route2API v0.1 is intentionally small. It uses static analysis and does not execute project code.
 
 - Complex nested route groups are not fully parsed yet
-- Request body schemas are basic
-- Validator and model field scanning are planned
+- Request body schemas are inferred from common patterns such as `$this->input()`, `$this->request->get(...)`, `requireFields(...)`, and simple validation arrays
+- Complex dynamic parameters may still need manual cleanup after generation
+- Full validator and model field scanning are planned
 - Laravel support is planned
 - Manual endpoint overrides are planned
 

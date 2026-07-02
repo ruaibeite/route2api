@@ -30,7 +30,7 @@ final class OpenApiExporter
             $openApiPath = $this->toOpenApiPath($endpoint->path);
             $method = strtolower($endpoint->method === 'ANY' ? 'get' : $endpoint->method);
 
-            $paths[$openApiPath][$method] = [
+            $operation = [
                 'summary' => $endpoint->title,
                 'description' => $endpoint->description,
                 'tags' => [$endpoint->group],
@@ -50,6 +50,13 @@ final class OpenApiExporter
                 'x-route2api-controller' => $endpoint->controller,
                 'x-route2api-middlewares' => $endpoint->middlewares,
             ];
+
+            $requestBody = $this->requestBody($endpoint);
+            if ($requestBody !== []) {
+                $operation['requestBody'] = $requestBody;
+            }
+
+            $paths[$openApiPath][$method] = $operation;
         }
 
         return [
@@ -91,6 +98,10 @@ final class OpenApiExporter
         }
 
         foreach ($endpoint->parameters as $parameter) {
+            if ($parameter['in'] === 'body') {
+                continue;
+            }
+
             $parameters[] = [
                 'name' => $parameter['name'],
                 'in' => $parameter['in'],
@@ -103,6 +114,50 @@ final class OpenApiExporter
         }
 
         return $parameters;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function requestBody(ApiEndpoint $endpoint): array
+    {
+        $properties = [];
+        $required = [];
+
+        foreach ($endpoint->parameters as $parameter) {
+            if ($parameter['in'] !== 'body') {
+                continue;
+            }
+
+            $properties[$parameter['name']] = [
+                'type' => $parameter['type'],
+                'description' => $parameter['description'],
+            ];
+            if ($parameter['required']) {
+                $required[] = $parameter['name'];
+            }
+        }
+
+        if ($properties === []) {
+            return [];
+        }
+
+        $schema = [
+            'type' => 'object',
+            'properties' => $properties,
+        ];
+        if ($required !== []) {
+            $schema['required'] = $required;
+        }
+
+        return [
+            'required' => $required !== [],
+            'content' => [
+                'application/json' => [
+                    'schema' => $schema,
+                ],
+            ],
+        ];
     }
 
     /**

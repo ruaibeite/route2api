@@ -9,5 +9,6 @@ class Profile
      */
     public function read()
     {
+        return $this->queryParams();
     }
 }

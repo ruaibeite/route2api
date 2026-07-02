@@ -13,6 +13,11 @@ class User
      */
     public function login()
     {
+        $data = $this->input();
+        if ($error = $this->requireFields($data, ['username', 'password'])) {
+            return $error;
+        }
+        $remember = $data['remember'] ?? false;
     }
 
     /**
@@ -22,5 +27,6 @@ class User
      */
     public function read()
     {
+        $refresh = $this->request->get('refresh', false);
     }
 }
