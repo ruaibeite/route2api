@@ -26,7 +26,9 @@ final class ThinkPHPScanner
             }
         }
 
-        usort($routes, static fn (ApiEndpoint $a, ApiEndpoint $b): int => [$a->path, $a->method] <=> [$b->path, $b->method]);
+        usort($routes, static function (ApiEndpoint $a, ApiEndpoint $b): int {
+            return [$a->path, $a->method] <=> [$b->path, $b->method];
+        });
 
         return new ApiProject($projectName, 'http://localhost', $routes);
     }
@@ -99,12 +101,14 @@ final class ThinkPHPScanner
             PREG_SET_ORDER
         );
 
-        return array_map(static fn (array $match): array => [
-            'method' => strtolower($match[1]),
-            'path' => $match[2],
-            'handler' => $match[3],
-            'chain' => $match[4] ?? '',
-        ], $matches);
+        return array_map(static function (array $match): array {
+            return [
+                'method' => strtolower($match[1]),
+                'path' => $match[2],
+                'handler' => $match[3],
+                'chain' => $match[4] ?? '',
+            ];
+        }, $matches);
     }
 
     /**
@@ -119,10 +123,12 @@ final class ThinkPHPScanner
             PREG_SET_ORDER
         );
 
-        return array_map(static fn (array $match): array => [
-            'path' => $match[1],
-            'handler' => $match[2],
-        ], $matches);
+        return array_map(static function (array $match): array {
+            return [
+                'path' => $match[1],
+                'handler' => $match[2],
+            ];
+        }, $matches);
     }
 
     /**
@@ -137,10 +143,12 @@ final class ThinkPHPScanner
             PREG_SET_ORDER
         );
 
-        return array_map(static fn (array $match): array => [
-            'prefix' => $match[1],
-            'body' => $match[2],
-        ], $matches);
+        return array_map(static function (array $match): array {
+            return [
+                'prefix' => $match[1],
+                'body' => $match[2],
+            ];
+        }, $matches);
     }
 
     /**
@@ -238,7 +246,7 @@ final class ThinkPHPScanner
         $parameters = [];
 
         foreach ($clean as $line) {
-            if (str_starts_with($line, '@param')) {
+            if (strncmp($line, '@param', 6) === 0) {
                 $parameter = $this->parseParamDoc($line, $httpMethod);
                 if ($parameter !== null) {
                     $parameters[] = $parameter;
@@ -246,7 +254,7 @@ final class ThinkPHPScanner
                 continue;
             }
 
-            if (str_starts_with($line, '@')) {
+            if (strncmp($line, '@', 1) === 0) {
                 continue;
             }
 
@@ -259,10 +267,10 @@ final class ThinkPHPScanner
 
         $methodBody = $this->methodBodyFromOffset($content, $match[0][1]);
         if ($methodBody !== '') {
-            $parameters = $this->mergeParameters([
-                ...$parameters,
-                ...(new ControllerAnalyzer())->extractParameters($methodBody, $httpMethod),
-            ]);
+            $parameters = $this->mergeParameters(array_merge(
+                $parameters,
+                (new ControllerAnalyzer())->extractParameters($methodBody, $httpMethod)
+            ));
         }
 
         return [
@@ -275,7 +283,7 @@ final class ThinkPHPScanner
     /**
      * @return array{name:string,in:string,required:bool,type:string,description:string}|null
      */
-    private function parseParamDoc(string $line, string $httpMethod): ?array
+    private function parseParamDoc(string $line, string $httpMethod)
     {
         if (!preg_match('/@param\\s+([\\w\\[\\]|]+)\\s+\\$?([\\w.]+)\\s*(.*)$/', $line, $match)) {
             return null;
@@ -284,7 +292,7 @@ final class ThinkPHPScanner
         return [
             'name' => $match[2],
             'in' => in_array(strtoupper($httpMethod), ['POST', 'PUT', 'PATCH'], true) ? 'body' : 'query',
-            'required' => !str_contains(strtolower($match[3] ?? ''), 'optional'),
+            'required' => strpos(strtolower($match[3] ?? ''), 'optional') === false,
             'type' => $this->normalizeType($match[1]),
             'description' => trim($match[3] ?? ''),
         ];
@@ -337,8 +345,8 @@ final class ThinkPHPScanner
      */
     private function splitController(string $controller): array
     {
-        if (str_contains($controller, '/')) {
-            [$class, $method] = explode('/', $controller, 2);
+        if (strpos($controller, '/') !== false) {
+            list($class, $method) = explode('/', $controller, 2);
             return [$class, $method];
         }
 
@@ -351,7 +359,7 @@ final class ThinkPHPScanner
     private function controllerToFile(string $class, string $projectPath, array $controllerDirs): string
     {
         $class = ltrim(str_replace('\\', '/', $class), '/');
-        if (str_starts_with($class, 'app/')) {
+        if (strncmp($class, 'app/', 4) === 0) {
             return $projectPath . '/' . $class . '.php';
         }
 
@@ -393,13 +401,20 @@ final class ThinkPHPScanner
     private function normalizeType(string $type): string
     {
         $type = strtolower(trim($type, '[]|'));
-        return match ($type) {
-            'int', 'integer' => 'integer',
-            'bool', 'boolean' => 'boolean',
-            'float', 'double', 'decimal' => 'number',
-            'array' => 'array',
-            default => 'string',
-        };
+        if ($type === 'int' || $type === 'integer') {
+            return 'integer';
+        }
+        if ($type === 'bool' || $type === 'boolean') {
+            return 'boolean';
+        }
+        if ($type === 'float' || $type === 'double' || $type === 'decimal') {
+            return 'number';
+        }
+        if ($type === 'array') {
+            return 'array';
+        }
+
+        return 'string';
     }
 
     /**

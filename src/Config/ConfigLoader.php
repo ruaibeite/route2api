@@ -9,7 +9,7 @@ final class ConfigLoader
     /**
      * @return array<string, mixed>
      */
-    public function load(?string $file): array
+    public function load($file): array
     {
         if ($file === null || !is_file($file)) {
             return [];
@@ -23,14 +23,16 @@ final class ConfigLoader
         foreach ($lines as $line) {
             $indent = strlen($line) - strlen(ltrim($line, ' '));
             $trimmed = trim($line);
-            if ($trimmed === '' || str_starts_with($trimmed, '#')) {
+            if ($trimmed === '' || strncmp($trimmed, '#', 1) === 0) {
                 continue;
             }
 
             if ($indent === 0 && preg_match('/^([a-zA-Z_][a-zA-Z0-9_]*):\\s*$/', $trimmed, $match) === 1) {
                 $section = $match[1];
                 $listKey = null;
-                $config[$section] ??= [];
+                if (!isset($config[$section])) {
+                    $config[$section] = [];
+                }
                 continue;
             }
 

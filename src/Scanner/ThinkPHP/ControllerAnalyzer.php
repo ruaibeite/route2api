@@ -35,7 +35,7 @@ final class ControllerAnalyzer
             $parameters[] = $this->parameter($field['name'], $this->inputLocation($httpMethod), $field['required'], $field['type'], 'Inferred from validation rule.');
         }
 
-        if (str_contains($methodBody, 'queryParams()')) {
+        if (strpos($methodBody, 'queryParams()') !== false) {
             foreach ($this->commonQueryParameters() as $parameter) {
                 $parameters[] = $parameter;
             }
@@ -52,12 +52,12 @@ final class ControllerAnalyzer
         $vars = [];
 
         preg_match_all('/\\$(\\w+)\\s*=\\s*\\$this->input\\s*\\(\\s*\\)\\s*;/', $methodBody, $matches);
-        array_push($vars, ...($matches[1] ?? []));
+        $vars = array_merge($vars, $matches[1] ?? []);
 
         preg_match_all('/\\$(\\w+)\\s*=\\s*\\$this->\\w*Input\\s*\\(\\s*\\$this->input\\s*\\(\\s*\\)\\s*\\)\\s*;/', $methodBody, $matches);
-        array_push($vars, ...($matches[1] ?? []));
+        $vars = array_merge($vars, $matches[1] ?? []);
 
-        if (str_contains($methodBody, '$this->input()')) {
+        if (strpos($methodBody, '$this->input()') !== false) {
             $vars[] = '__direct_input__';
         }
 
@@ -92,20 +92,17 @@ final class ControllerAnalyzer
 
         preg_match_all('/requireFields\\s*\\(\\s*\\$\\w+\\s*,\\s*\\[([^\\]]*)\\]\\s*\\)/s', $methodBody, $matches, PREG_SET_ORDER);
         foreach ($matches as $match) {
-            array_push($fields, ...$this->stringsFromArrayLiteral($match[1]));
+            $fields = array_merge($fields, $this->stringsFromArrayLiteral($match[1]));
         }
 
         preg_match_all('/requireFields\\s*\\(\\s*\\$\\w+\\s*,\\s*\\$(\\w+)\\s*\\)/', $methodBody, $matches, PREG_SET_ORDER);
         foreach ($matches as $match) {
-            array_push($fields, ...($arrayVars[$match[1]] ?? []));
+            $fields = array_merge($fields, $arrayVars[$match[1]] ?? []);
         }
 
         return array_values(array_unique($fields));
     }
 
-    /**
-     * @return string[]
-     */
     /**
      * @param string[] $inputVars
      * @return string[]
@@ -117,7 +114,7 @@ final class ControllerAnalyzer
         foreach ($inputVars as $var) {
             if ($var === '__direct_input__') {
                 preg_match_all('/\\$this->input\\s*\\(\\s*\\)\\s*\\[\\s*[\'"]([A-Za-z_][A-Za-z0-9_.]*)[\'"]\\s*\\](?!\\s*=)/', $methodBody, $matches);
-                array_push($fields, ...($matches[1] ?? []));
+                $fields = array_merge($fields, $matches[1] ?? []);
                 continue;
             }
 
@@ -131,7 +128,7 @@ final class ControllerAnalyzer
 
             foreach ($patterns as $pattern) {
                 preg_match_all($pattern, $methodBody, $matches);
-                array_push($fields, ...($matches[1] ?? []));
+                $fields = array_merge($fields, $matches[1] ?? []);
             }
         }
 
@@ -155,7 +152,7 @@ final class ControllerAnalyzer
             $quotedInputVar = preg_quote($inputVar, '/');
             preg_match_all('/foreach\\s*\\(\\s*\\$(\\w+)\\s+as\\s+\\$(\\w+)\\s*\\).*?array_key_exists\\s*\\(\\s*\\$\\2\\s*,\\s*\\$' . $quotedInputVar . '\\s*\\)/s', $methodBody, $matches, PREG_SET_ORDER);
             foreach ($matches as $match) {
-                array_push($fields, ...($arrayVars[$match[1]] ?? []));
+                $fields = array_merge($fields, $arrayVars[$match[1]] ?? []);
             }
         }
 
@@ -200,7 +197,7 @@ final class ControllerAnalyzer
             foreach ($ruleMatches as $ruleMatch) {
                 $fields[] = [
                     'name' => $ruleMatch[1],
-                    'required' => str_contains($ruleMatch[2], 'require'),
+                    'required' => strpos($ruleMatch[2], 'require') !== false,
                     'type' => $this->typeFromRule($ruleMatch[2]),
                 ];
             }
@@ -224,12 +221,14 @@ final class ControllerAnalyzer
      */
     private function filterFieldNames(array $fields): array
     {
-        return array_values(array_filter(array_unique($fields), fn (string $field): bool => !$this->isInternalField($field)));
+        return array_values(array_filter(array_unique($fields), function (string $field): bool {
+            return !$this->isInternalField($field);
+        }));
     }
 
     private function isInternalField(string $field): bool
     {
-        return str_starts_with($field, '__') || in_array($field, ['password_hash', 'token_hash'], true);
+        return strncmp($field, '__', 2) === 0 || in_array($field, ['password_hash', 'token_hash'], true);
     }
 
     private function inputLocation(string $httpMethod): string
@@ -265,19 +264,19 @@ final class ControllerAnalyzer
 
     private function typeFromName(string $name): string
     {
-        if (str_ends_with($name, '_ids') || in_array($name, ['ids', 'resources', 'experimenters'], true)) {
+        if ($this->endsWith($name, '_ids') || in_array($name, ['ids', 'resources', 'experimenters'], true)) {
             return 'array';
         }
 
-        if ($name === 'id' || str_ends_with($name, '_id') || in_array($name, ['page', 'page_size'], true)) {
+        if ($name === 'id' || $this->endsWith($name, '_id') || in_array($name, ['page', 'page_size'], true)) {
             return 'integer';
         }
 
-        if (str_starts_with($name, 'is_') || in_array($name, ['status', 'paginate', 'refresh'], true)) {
+        if (strncmp($name, 'is_', 3) === 0 || in_array($name, ['status', 'paginate', 'refresh'], true)) {
             return $name === 'status' ? 'string' : 'boolean';
         }
 
-        if (in_array($name, ['value', 'quantity', 'amount', 'price'], true) || str_ends_with($name, '_value')) {
+        if (in_array($name, ['value', 'quantity', 'amount', 'price'], true) || $this->endsWith($name, '_value')) {
             return 'number';
         }
 
@@ -296,10 +295,10 @@ final class ControllerAnalyzer
         }
 
         if (is_numeric($default)) {
-            return str_contains($default, '.') ? 'number' : 'integer';
+            return strpos($default, '.') !== false ? 'number' : 'integer';
         }
 
-        if (str_starts_with($default, '[')) {
+        if (strncmp($default, '[', 1) === 0) {
             return 'array';
         }
 
@@ -309,13 +308,29 @@ final class ControllerAnalyzer
     private function typeFromRule(string $rule): string
     {
         $rule = strtolower($rule);
-        return match (true) {
-            str_contains($rule, 'integer') || str_contains($rule, 'number') => 'integer',
-            str_contains($rule, 'float') || str_contains($rule, 'double') => 'number',
-            str_contains($rule, 'array') => 'array',
-            str_contains($rule, 'bool') => 'boolean',
-            default => 'string',
-        };
+        if (strpos($rule, 'integer') !== false || strpos($rule, 'number') !== false) {
+            return 'integer';
+        }
+        if (strpos($rule, 'float') !== false || strpos($rule, 'double') !== false) {
+            return 'number';
+        }
+        if (strpos($rule, 'array') !== false) {
+            return 'array';
+        }
+        if (strpos($rule, 'bool') !== false) {
+            return 'boolean';
+        }
+
+        return 'string';
+    }
+
+    private function endsWith(string $value, string $suffix): bool
+    {
+        if ($suffix === '') {
+            return true;
+        }
+
+        return substr($value, -strlen($suffix)) === $suffix;
     }
 
     /**

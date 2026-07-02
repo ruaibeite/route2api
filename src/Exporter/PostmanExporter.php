@@ -62,7 +62,9 @@ final class PostmanExporter
 
         $bodyParameters = array_values(array_filter(
             $endpoint->parameters,
-            static fn (array $parameter): bool => $parameter['in'] === 'body'
+            static function (array $parameter): bool {
+                return $parameter['in'] === 'body';
+            }
         ));
         $body = [];
         foreach ($bodyParameters as $parameter) {
@@ -107,14 +109,21 @@ final class PostmanExporter
     /**
      * @return mixed
      */
-    private function exampleValue(string $type): mixed
+    private function exampleValue(string $type)
     {
-        return match ($type) {
-            'integer' => 0,
-            'number' => 0.0,
-            'boolean' => false,
-            'array' => [],
-            default => '',
-        };
+        if ($type === 'integer') {
+            return 0;
+        }
+        if ($type === 'number') {
+            return 0.0;
+        }
+        if ($type === 'boolean') {
+            return false;
+        }
+        if ($type === 'array') {
+            return [];
+        }
+
+        return '';
     }
 }

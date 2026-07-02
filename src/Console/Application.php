@@ -19,11 +19,13 @@ final class Application
         $command = $argv[1] ?? 'help';
 
         try {
-            return match ($command) {
-                'scan' => $this->scan(array_slice($argv, 2)),
-                'init' => $this->init(array_slice($argv, 2)),
-                default => $this->help(),
-            };
+            if ($command === 'scan') {
+                return $this->scan(array_slice($argv, 2));
+            }
+            if ($command === 'init') {
+                return $this->init(array_slice($argv, 2));
+            }
+            return $this->help();
         } catch (Throwable $exception) {
             fwrite(STDERR, 'Route2API error: ' . $exception->getMessage() . PHP_EOL);
             return 1;
@@ -167,7 +169,7 @@ TXT;
         $options = [];
 
         foreach ($args as $arg) {
-            if (!str_starts_with($arg, '--')) {
+            if (strncmp($arg, '--', 2) !== 0) {
                 continue;
             }
 
@@ -180,7 +182,7 @@ TXT;
 
     private function absolutePath(string $path, string $basePath): string
     {
-        if (str_starts_with($path, '/') || preg_match('/^[A-Za-z]:\\\\/', $path) === 1) {
+        if (strncmp($path, '/', 1) === 0 || preg_match('/^[A-Za-z]:\\\\/', $path) === 1) {
             return $path;
         }
 
@@ -191,7 +193,7 @@ TXT;
      * @param mixed $formats
      * @return string[]
      */
-    private function formats(mixed $formats): array
+    private function formats($formats): array
     {
         return $this->stringList($formats, ',');
     }
@@ -200,10 +202,12 @@ TXT;
      * @param mixed $value
      * @return string[]
      */
-    private function stringList(mixed $value, string $separator = ','): array
+    private function stringList($value, string $separator = ','): array
     {
         if (is_array($value)) {
-            return array_values(array_filter(array_map(static fn (mixed $item): string => trim((string) $item), $value)));
+            return array_values(array_filter(array_map(static function ($item): string {
+                return trim((string) $item);
+            }, $value)));
         }
 
         return array_values(array_filter(array_map('trim', explode($separator, (string) $value))));

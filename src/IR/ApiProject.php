@@ -6,13 +6,17 @@ namespace Route2Api\IR;
 
 final class ApiProject
 {
+    public $name;
+    public $baseUrl;
+    public $endpoints;
+
     /**
      * @param ApiEndpoint[] $endpoints
      */
-    public function __construct(
-        public string $name,
-        public string $baseUrl,
-        public array $endpoints = [],
-    ) {
+    public function __construct(string $name, string $baseUrl, array $endpoints = [])
+    {
+        $this->name = $name;
+        $this->baseUrl = $baseUrl;
+        $this->endpoints = $endpoints;
     }
 }

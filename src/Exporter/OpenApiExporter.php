@@ -163,7 +163,7 @@ final class OpenApiExporter
     /**
      * @param mixed $value
      */
-    private function yaml(mixed $value, int $indent = 0): string
+    private function yaml($value, int $indent = 0): string
     {
         $lines = [];
         $prefix = str_repeat('  ', $indent);
@@ -197,7 +197,7 @@ final class OpenApiExporter
     /**
      * @param mixed $value
      */
-    private function yamlScalar(mixed $value): string
+    private function yamlScalar($value): string
     {
         if ($value === null) {
             return 'null';

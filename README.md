@@ -22,6 +22,12 @@ Route2API is an open-source API documentation generator for PHP projects. The fi
 
 ## Install
 
+Requirements:
+
+- PHP 7.0 or later for Route2API itself
+- ThinkPHP 6.x projects are supported for scanning
+- ThinkPHP 6 runtime usually requires PHP 7.2.5 or later
+
 Install Route2API as a development dependency in your ThinkPHP project:
 
 ```bash

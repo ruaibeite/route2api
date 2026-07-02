@@ -29,7 +29,7 @@ final class MarkdownExporter
             $lines[] = '';
 
             foreach ($endpoints as $endpoint) {
-                array_push($lines, ...$this->endpoint($endpoint));
+                $lines = array_merge($lines, $this->endpoint($endpoint));
             }
         }
 
